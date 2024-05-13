@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+	"unsafe"
+)
 
 func TestValueTypeMod(t *testing.T) {
 	x := 5
@@ -43,5 +47,75 @@ func TestGetRefType(t *testing.T) {
 	expected := []int{5, 6, 7}
 	if !equalSlices(anotherSlice, expected) {
 		t.Errorf("Expected getReferenceTypeInstance to return %v, got %v", expected, anotherSlice)
+	}
+}
+
+func TestValueTypeOnStack(t *testing.T) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	initialHeapSize := m.HeapInuse
+
+	y := get_value_type()
+	_ = y
+
+	// Get the new heap size
+	runtime.ReadMemStats(&m)
+	newHeapSize := m.HeapInuse
+
+	if newHeapSize-initialHeapSize != 0 {
+		t.Errorf("Expected no heap allocation for value type, but heap grew by %d bytes", newHeapSize-initialHeapSize)
+	}
+}
+
+func TestRefTypeOnHeap(t *testing.T) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	initialHeapSize := m.HeapInuse
+
+	largeSlice := make([]int, 1000000)
+	_ = largeSlice
+
+	runtime.ReadMemStats(&m)
+	newHeapSize := m.HeapInuse
+
+	if newHeapSize <= initialHeapSize {
+		t.Errorf("Expected heap allocation for large reference type, but heap size did not change")
+	}
+}
+
+func TestGarbageCollection(t *testing.T) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	initialHeapSize := m.HeapInuse
+
+	largeSlice := make([]int, 1000000)
+	_ = largeSlice
+
+	// Get the new heap size
+	runtime.ReadMemStats(&m)
+	heapSizeAfterAllocation := m.HeapInuse
+
+	runtime.GC()
+	runtime.GC()
+
+	runtime.ReadMemStats(&m)
+	heapSizeAfterGC := m.HeapInuse
+
+	if heapSizeAfterGC >= heapSizeAfterAllocation || heapSizeAfterGC >= initialHeapSize {
+		t.Errorf("Expected heap size to decrease after garbage collection, but it grew or remained the same")
+	}
+}
+
+func TestSizeOfValueType(t *testing.T) {
+	intSize := unsafe.Sizeof(int(0))
+	if intSize != 8 {
+		t.Errorf("Expected size of int to be 8 bytes, got %d bytes", intSize)
+	}
+}
+
+func TestSizeOfRefType(t *testing.T) {
+	sliceSize := unsafe.Sizeof([]int{})
+	if sliceSize != 24 {
+		t.Errorf("Expected size of slice to be 24 bytes, got %d bytes", sliceSize)
 	}
 }
